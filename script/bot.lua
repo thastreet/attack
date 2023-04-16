@@ -3,6 +3,23 @@ json = require "json"
 host, port = "127.0.0.1", 9876
 
 sid = socket.udp()
+sid:settimeout(1 / 60)
+
+serverResponse = nil
+
+local function HandleServerResponse()
+    if serverResponse == "left" then
+        joypad.set(1, {left = true})
+    elseif serverResponse == "right" then
+        joypad.set(1, {right = true})
+    elseif serverResponse == "up" then
+        joypad.set(1, {up = true})
+    elseif serverResponse == "down" then
+        joypad.set(1, {down = true})
+    end
+
+    emu.registerbefore(nil)
+end
 
 local function AfterFrame()
     board = {}
@@ -27,5 +44,12 @@ local function AfterFrame()
     end
 
     sid:sendto( json.encode({ board = board }), host, port )
+
+    serverResponse = sid:receive()
+
+    if serverResponse then
+        print("Received: ", serverResponse)
+        emu.registerbefore(HandleServerResponse)
+    end
 end
 emu.registerafter(AfterFrame)
