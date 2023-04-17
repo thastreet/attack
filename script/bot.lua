@@ -43,7 +43,9 @@ local function AfterFrame()
         table.insert(board, row)
     end
 
-    sid:sendto( json.encode({ board = board }), host, port )
+    cursor = { x = memory.readbyte(0x007E03A4), y = memory.readbyte(0x007E03B0) }
+
+    sid:sendto( json.encode({ board = board, cursor = cursor }), host, port )
 
     serverResponse = sid:receive()
 

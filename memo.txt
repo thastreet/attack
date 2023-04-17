@@ -3,6 +3,8 @@ top left = 0x007E0FBE
 top right = 0x007E0FC8
 bottom left = 0x007E105E
 bottom right = 0x007E1068
+cursor x = 0x007E03A4 (from 01 to 06)
+cursor y = 0x007E03B0 (from 04 to 0E)
 
 Value
 0 = empty
@@ -21,5 +23,6 @@ State
 4 = cement
 10 = combo part 2
 14 = broken cement part 2
+20 = hidden bottom row
 40 = combo part 1
 44 = broken cement part 1

@@ -25,6 +25,9 @@ kotlin {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0")
+
+                implementation("androidx.compose.ui:ui-tooling:1.4.0")
+                implementation("androidx.compose.ui:ui-tooling-preview:1.4.0")
             }
         }
         val jvmTest by getting
