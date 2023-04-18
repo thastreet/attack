@@ -1,6 +1,7 @@
 object Mock {
     val response = """
         {
+            "cursor": { "x": 0, "y": 0 },
             "board": [
                 [
                     {

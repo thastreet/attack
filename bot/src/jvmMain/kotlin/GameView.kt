@@ -19,12 +19,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.times
 import kotlinx.serialization.json.Json
 
-@Suppress("FunctionName")
 @Composable
-fun DebugView(response: Response?) {
+fun GameView(response: Response?) {
     val requiredResponse = response ?: return
 
-    Box(Modifier.fillMaxSize()) {
+    Box {
         val blockSize = 32.dp
 
         Column {
@@ -117,5 +116,5 @@ fun DebugView(response: Response?) {
 @Preview
 @Composable
 private fun Preview() {
-    DebugView(Json.decodeFromString(Response.serializer(), Mock.response))
+    GameView(Json.decodeFromString(Response.serializer(), Mock.response))
 }
