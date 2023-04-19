@@ -16,6 +16,8 @@ local function HandleServerResponse()
         joypad.set(1, {up = true})
     elseif serverResponse == "down" then
         joypad.set(1, {down = true})
+    elseif serverResponse == "A" then
+        joypad.set(1, {A = true})
     end
 
     emu.registerbefore(nil)

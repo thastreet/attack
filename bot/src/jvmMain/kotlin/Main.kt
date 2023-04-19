@@ -1,3 +1,4 @@
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -10,13 +11,12 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import kotlin.math.abs
 
-private const val MOCK_ENABLED = true
+private const val MOCK_ENABLED = false
 
 fun main() {
     application {
-        val coroutineScope = remember { CoroutineScope(Dispatchers.IO) }
-
         var response by remember {
             mutableStateOf<Response?>(null)
         }
@@ -25,20 +25,21 @@ fun main() {
             mutableStateOf<Array<Array<Response.Block>>?>(null)
         }
 
-        coroutineScope.launch {
-            runServer {
-                response = it
-                analyze(it)
-            }
-        }
-
         Window(onCloseRequest = ::exitApplication) {
             RootView(response, debug)
+        }
+
+        LaunchedEffect(true) {
+            CoroutineScope(Dispatchers.IO).launch {
+                runServer {
+                    analyze(it)
+                }
+            }
         }
     }
 }
 
-fun analyze(response: Response) {
+fun analyze(response: Response): Pair<Int, Combo>? {
     val boardWithoutLastRow = response.board.dropLast(1)
 
     for (j in boardWithoutLastRow.indices) {
@@ -46,12 +47,16 @@ fun analyze(response: Response) {
             val board = boardWithoutLastRow.map { it.toTypedArray() }.toTypedArray()
 
             if (board[j][i].value == board[j][i + 1].value) continue
-            simulateFlip(board, i, j)
+            simulateFlip(board, i, j)?.let {
+                return it
+            }
         }
     }
+
+    return null
 }
 
-fun simulateFlip(board: Array<Array<Response.Block>>, i: Int, j: Int) {
+fun simulateFlip(board: Array<Array<Response.Block>>, i: Int, j: Int): Pair<Int, Combo>? {
     println("simulating flip ($i, $j)")
 
     val temp = board[j][i]
@@ -60,12 +65,15 @@ fun simulateFlip(board: Array<Array<Response.Block>>, i: Int, j: Int) {
 
     applyGravity(board)
 
-    for (j in board.indices) {
-        val combos = getConsecutive(board[j].map { it.value }).filter { it.value != 0 && it.value != 255 && it.count > 2 }
-        combos.forEach {
-            println("Combo ${it.count} at row index $j col ${it.startIndex}")
+    for (k in board.indices) {
+        val combos = getConsecutive(board[k].map { it.value }, i, j, k).filter { it.count > 2 }
+        combos.firstOrNull()?.let {
+            println("Combo ${it.count} at row index $k col ${it.startIndex}")
+            return Pair(k, it)
         }
     }
+
+    return null
 }
 
 data class Combo(
@@ -74,14 +82,19 @@ data class Combo(
     val startIndex: Int
 )
 
-fun getConsecutive(row: Collection<Int>): List<Combo> =
+fun getConsecutive(row: Collection<Int>, i: Int, j: Int, k: Int): List<Combo> =
     row.foldIndexed(mutableListOf()) { index, acc, value ->
+        if (value == 0) return@foldIndexed acc
+
         if (acc.isEmpty()) {
             acc.add(Combo(value, 1, index))
         } else {
             val last = acc.last()
             if (last.value == value) {
-                acc[acc.size - 1] = Combo(last.value, last.count + 1, last.startIndex)
+                if (last.count == 2) {
+                    true
+                }
+                acc[acc.size - 1] = Combo(last.value, last.count + 1, if (j == k && index == i) index else last.startIndex)
             } else {
                 acc.add(Combo(value, 1, index))
             }
@@ -107,9 +120,9 @@ fun applyGravity(board: Array<Array<Response.Block>>) {
     }
 }
 
-fun runServer(onResponse: (Response) -> Unit) {
+fun runServer(analyze: (Response) -> Pair<Int, Combo>?) {
     if (MOCK_ENABLED) {
-        onResponse(Json.decodeFromString(Response.serializer(), Mock.response))
+        analyze(Json.decodeFromString(Response.serializer(), Mock.response))
         return
     }
 
@@ -118,7 +131,7 @@ fun runServer(onResponse: (Response) -> Unit) {
     val buffer = ByteArray(2048)
     val packet = DatagramPacket(buffer, buffer.size)
 
-    val queue = mutableListOf<String>()
+    var queue: MutableList<String>? = null
     var skipNextFrame = false
 
     while (true) {
@@ -127,11 +140,34 @@ fun runServer(onResponse: (Response) -> Unit) {
         val responseJson = packet.data.decodeToString().take(packet.length)
         val response = Json.decodeFromString(Response.serializer(), responseJson)
 
-        onResponse(response)
+        if (queue == null) {
+            analyze(response)?.let {
+                val newQueue = mutableListOf<String>()
 
-        val command = if (response.board.last().any { it.value != 0 && it.value != 255 } && queue.isNotEmpty() && !skipNextFrame) {
+                val cursorX = response.cursor.x - 1
+                val cursorY = response.cursor.y - 4
+
+                if (it.second.startIndex > cursorX) {
+                    newQueue.addAll(List(abs(it.second.startIndex - cursorX)) { "right" })
+                } else if (it.second.startIndex < cursorX) {
+                    newQueue.addAll(List(abs(cursorX - it.second.startIndex)) { "left" })
+                }
+
+                if (it.first > cursorY) {
+                    newQueue.addAll(List(abs(it.first - cursorY)) { "down" })
+                } else if (it.first < cursorY) {
+                    newQueue.addAll(List(abs(cursorY - it.first)) { "up" })
+                }
+
+                newQueue.add("A")
+
+                queue = newQueue
+            }
+        }
+
+        val command = if (response.board.last().any { it.value != 0 && it.value != 255 } && !queue.isNullOrEmpty() && !skipNextFrame) {
             skipNextFrame = true
-            queue.removeFirst()
+            queue?.removeFirst() ?: "no-op"
         } else {
             skipNextFrame = false
             "no-op"
@@ -145,5 +181,9 @@ fun runServer(onResponse: (Response) -> Unit) {
                 packet.port
             )
         )
+
+        if (queue?.isEmpty() == true && !skipNextFrame) {
+            queue = null
+        }
     }
 }
