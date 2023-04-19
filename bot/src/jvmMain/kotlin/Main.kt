@@ -28,7 +28,7 @@ fun main() {
         coroutineScope.launch {
             runServer {
                 response = it
-                debug = analyze(it)
+                analyze(it)
             }
         }
 
@@ -38,20 +38,17 @@ fun main() {
     }
 }
 
-fun analyze(response: Response): Array<Array<Response.Block>> {
-    val board = response.board
-        .dropLast(1)
-        .map { it.toTypedArray() }
-        .toTypedArray()
+fun analyze(response: Response) {
+    val boardWithoutLastRow = response.board.dropLast(1)
 
-    for (j in board.indices) {
-        for (i in 0 until board[j].size - 1) {
+    for (j in boardWithoutLastRow.indices) {
+        for (i in 0 until boardWithoutLastRow[j].size - 1) {
+            val board = boardWithoutLastRow.map { it.toTypedArray() }.toTypedArray()
+
             if (board[j][i].value == board[j][i + 1].value) continue
             simulateFlip(board, i, j)
         }
     }
-
-    return board
 }
 
 fun simulateFlip(board: Array<Array<Response.Block>>, i: Int, j: Int) {
@@ -62,7 +59,36 @@ fun simulateFlip(board: Array<Array<Response.Block>>, i: Int, j: Int) {
     board[j][i + 1] = temp
 
     applyGravity(board)
+
+    for (j in board.indices) {
+        val combos = getConsecutive(board[j].map { it.value }).filter { it.value != 0 && it.value != 255 && it.count > 2 }
+        combos.forEach {
+            println("Combo ${it.count} at row index $j col ${it.startIndex}")
+        }
+    }
 }
+
+data class Combo(
+    val value: Int,
+    val count: Int,
+    val startIndex: Int
+)
+
+fun getConsecutive(row: Collection<Int>): List<Combo> =
+    row.foldIndexed(mutableListOf()) { index, acc, value ->
+        if (acc.isEmpty()) {
+            acc.add(Combo(value, 1, index))
+        } else {
+            val last = acc.last()
+            if (last.value == value) {
+                acc[acc.size - 1] = Combo(last.value, last.count + 1, last.startIndex)
+            } else {
+                acc.add(Combo(value, 1, index))
+            }
+        }
+
+        acc
+    }
 
 fun applyGravity(board: Array<Array<Response.Block>>) {
     for (j in board.size - 1 downTo 0) {
@@ -92,6 +118,9 @@ fun runServer(onResponse: (Response) -> Unit) {
     val buffer = ByteArray(2048)
     val packet = DatagramPacket(buffer, buffer.size)
 
+    val queue = mutableListOf<String>()
+    var skipNextFrame = false
+
     while (true) {
         datagramSocket.receive(packet)
 
@@ -100,7 +129,14 @@ fun runServer(onResponse: (Response) -> Unit) {
 
         onResponse(response)
 
-        val command = "no-op"
+        val command = if (response.board.last().any { it.value != 0 && it.value != 255 } && queue.isNotEmpty() && !skipNextFrame) {
+            skipNextFrame = true
+            queue.removeFirst()
+        } else {
+            skipNextFrame = false
+            "no-op"
+        }
+
         datagramSocket.send(
             DatagramPacket(
                 command.encodeToByteArray(),
