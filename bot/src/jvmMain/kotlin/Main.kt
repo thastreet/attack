@@ -39,7 +39,7 @@ fun main() {
     }
 }
 
-fun analyze(response: Response): Pair<Int, Combo>? {
+fun analyze(response: Response): Pair<Int, Int>? {
     val boardWithoutLastRow = response.board.dropLast(1)
 
     for (j in boardWithoutLastRow.indices) {
@@ -56,7 +56,7 @@ fun analyze(response: Response): Pair<Int, Combo>? {
     return null
 }
 
-fun simulateFlip(board: Array<Array<Response.Block>>, i: Int, j: Int): Pair<Int, Combo>? {
+fun simulateFlip(board: Array<Array<Response.Block>>, i: Int, j: Int): Pair<Int, Int>? {
     println("simulating flip ($i, $j)")
 
     val temp = board[j][i]
@@ -66,10 +66,10 @@ fun simulateFlip(board: Array<Array<Response.Block>>, i: Int, j: Int): Pair<Int,
     applyGravity(board)
 
     for (k in board.indices) {
-        val combos = getConsecutive(board[k].map { it.value }, i, j, k).filter { it.count > 2 }
+        val combos = getConsecutive(board[k].map { it.value }).filter { it.count > 2 }
         combos.firstOrNull()?.let {
             println("Combo ${it.count} at row index $k col ${it.startIndex}")
-            return Pair(j, it)
+            return Pair(i, j)
         }
     }
 
@@ -82,8 +82,7 @@ data class Combo(
     val startIndex: Int
 )
 
-// TODO: Fix issue with XOXX moving to XXOX
-fun getConsecutive(row: Collection<Int>, i: Int, j: Int, k: Int): List<Combo> =
+fun getConsecutive(row: Collection<Int>): List<Combo> =
     row.foldIndexed(mutableListOf()) { index, acc, value ->
         if (value == 0) return@foldIndexed acc
 
@@ -92,7 +91,7 @@ fun getConsecutive(row: Collection<Int>, i: Int, j: Int, k: Int): List<Combo> =
         } else {
             val last = acc.last()
             if (last.value == value) {
-                acc[acc.size - 1] = Combo(last.value, last.count + 1, if (j == k && index == i) index else last.startIndex)
+                acc[acc.size - 1] = Combo(last.value, last.count + 1, last.startIndex)
             } else {
                 acc.add(Combo(value, 1, index))
             }
@@ -118,7 +117,7 @@ fun applyGravity(board: Array<Array<Response.Block>>) {
     }
 }
 
-fun runServer(analyze: (Response) -> Pair<Int, Combo>?) {
+fun runServer(analyze: (Response) -> Pair<Int, Int>?) {
     if (MOCK_ENABLED) {
         analyze(Json.decodeFromString(Response.serializer(), Mock.response))
         return
@@ -142,22 +141,22 @@ fun runServer(analyze: (Response) -> Pair<Int, Combo>?) {
         val command = if (!animating && response.board.last().any { it.value != 0 && it.value != 255 }) {
             if (queue == null) {
                 analyze(response)?.let {
-                    println("Moving to ${it.second.startIndex}, ${it.first}")
+                    println("Moving to ${it.second}, ${it.first}")
                     val newQueue = mutableListOf<String>()
 
                     val cursorX = response.cursor.x - 1
                     val cursorY = response.cursor.y - 4
 
-                    if (it.second.startIndex > cursorX) {
-                        newQueue.addAll(List(abs(it.second.startIndex - cursorX)) { "right" })
-                    } else if (it.second.startIndex < cursorX) {
-                        newQueue.addAll(List(abs(cursorX - it.second.startIndex)) { "left" })
+                    if (it.first > cursorX) {
+                        newQueue.addAll(List(abs(it.first - cursorX)) { "right" })
+                    } else if (it.first < cursorX) {
+                        newQueue.addAll(List(abs(cursorX - it.first)) { "left" })
                     }
 
-                    if (it.first > cursorY) {
-                        newQueue.addAll(List(abs(it.first - cursorY)) { "down" })
-                    } else if (it.first < cursorY) {
-                        newQueue.addAll(List(abs(cursorY - it.first)) { "up" })
+                    if (it.second > cursorY) {
+                        newQueue.addAll(List(abs(it.second - cursorY)) { "down" })
+                    } else if (it.second < cursorY) {
+                        newQueue.addAll(List(abs(cursorY - it.second)) { "up" })
                     }
 
                     newQueue.add("A")
