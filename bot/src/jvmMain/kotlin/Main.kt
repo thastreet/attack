@@ -69,7 +69,7 @@ fun simulateFlip(board: Array<Array<Response.Block>>, i: Int, j: Int): Pair<Int,
         val combos = getConsecutive(board[k].map { it.value }, i, j, k).filter { it.count > 2 }
         combos.firstOrNull()?.let {
             println("Combo ${it.count} at row index $k col ${it.startIndex}")
-            return Pair(k, it)
+            return Pair(j, it)
         }
     }
 
@@ -82,6 +82,7 @@ data class Combo(
     val startIndex: Int
 )
 
+// TODO: Fix issue with XOXX moving to XXOX
 fun getConsecutive(row: Collection<Int>, i: Int, j: Int, k: Int): List<Combo> =
     row.foldIndexed(mutableListOf()) { index, acc, value ->
         if (value == 0) return@foldIndexed acc
@@ -91,9 +92,6 @@ fun getConsecutive(row: Collection<Int>, i: Int, j: Int, k: Int): List<Combo> =
         } else {
             val last = acc.last()
             if (last.value == value) {
-                if (last.count == 2) {
-                    true
-                }
                 acc[acc.size - 1] = Combo(last.value, last.count + 1, if (j == k && index == i) index else last.startIndex)
             } else {
                 acc.add(Combo(value, 1, index))
@@ -140,36 +138,46 @@ fun runServer(analyze: (Response) -> Pair<Int, Combo>?) {
         val responseJson = packet.data.decodeToString().take(packet.length)
         val response = Json.decodeFromString(Response.serializer(), responseJson)
 
-        if (queue == null) {
-            analyze(response)?.let {
-                val newQueue = mutableListOf<String>()
+        val animating = response.board.flatten().map { it.state }.any { it == 16 || it == 64 }
+        val command = if (!animating && response.board.last().any { it.value != 0 && it.value != 255 }) {
+            if (queue == null) {
+                analyze(response)?.let {
+                    println("Moving to ${it.second.startIndex}, ${it.first}")
+                    val newQueue = mutableListOf<String>()
 
-                val cursorX = response.cursor.x - 1
-                val cursorY = response.cursor.y - 4
+                    val cursorX = response.cursor.x - 1
+                    val cursorY = response.cursor.y - 4
 
-                if (it.second.startIndex > cursorX) {
-                    newQueue.addAll(List(abs(it.second.startIndex - cursorX)) { "right" })
-                } else if (it.second.startIndex < cursorX) {
-                    newQueue.addAll(List(abs(cursorX - it.second.startIndex)) { "left" })
+                    if (it.second.startIndex > cursorX) {
+                        newQueue.addAll(List(abs(it.second.startIndex - cursorX)) { "right" })
+                    } else if (it.second.startIndex < cursorX) {
+                        newQueue.addAll(List(abs(cursorX - it.second.startIndex)) { "left" })
+                    }
+
+                    if (it.first > cursorY) {
+                        newQueue.addAll(List(abs(it.first - cursorY)) { "down" })
+                    } else if (it.first < cursorY) {
+                        newQueue.addAll(List(abs(cursorY - it.first)) { "up" })
+                    }
+
+                    newQueue.add("A")
+
+                    queue = newQueue
                 }
-
-                if (it.first > cursorY) {
-                    newQueue.addAll(List(abs(it.first - cursorY)) { "down" })
-                } else if (it.first < cursorY) {
-                    newQueue.addAll(List(abs(cursorY - it.first)) { "up" })
-                }
-
-                newQueue.add("A")
-
-                queue = newQueue
             }
-        }
 
-        val command = if (response.board.last().any { it.value != 0 && it.value != 255 } && !queue.isNullOrEmpty() && !skipNextFrame) {
-            skipNextFrame = true
-            queue?.removeFirst() ?: "no-op"
+            if (response.board.last().any { it.value != 0 && it.value != 255 } && !queue.isNullOrEmpty() && !skipNextFrame) {
+                skipNextFrame = true
+                queue?.removeFirst() ?: "no-op"
+            } else {
+                skipNextFrame = false
+                "no-op"
+            }
         } else {
-            skipNextFrame = false
+            if (animating) {
+                queue = null
+            }
+
             "no-op"
         }
 
@@ -181,9 +189,5 @@ fun runServer(analyze: (Response) -> Pair<Int, Combo>?) {
                 packet.port
             )
         )
-
-        if (queue?.isEmpty() == true && !skipNextFrame) {
-            queue = null
-        }
     }
 }
