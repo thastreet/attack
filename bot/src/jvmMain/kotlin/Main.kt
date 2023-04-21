@@ -1,4 +1,3 @@
-
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,7 +14,8 @@ import java.net.DatagramSocket
 import kotlin.math.abs
 
 private const val MOCK_ENABLED = false
-private const val FRAMES_TO_SKIP = 15
+private const val FRAMES_TO_SKIP = 8
+private const val NO_OP = "NO_OP"
 
 fun main() {
     application {
@@ -117,6 +117,22 @@ fun applyGravity(board: Array<Array<Response.Block>>) {
     }
 }
 
+fun isAnyBlockFalling(board: List<List<Response.Block>>): Boolean {
+    for (j in board.size - 1 downTo 0) {
+        for (i in board[j].indices) {
+            if (board[j][i].value != 0) continue
+
+            for (k in j - 1 downTo 0) {
+                if (board[k][i].value != 0) {
+                    return true
+                }
+            }
+        }
+    }
+
+    return false
+}
+
 fun runServer(analyze: (Response) -> Pair<Int, Int>?) {
     if (MOCK_ENABLED) {
         analyze(Json.decodeFromString(Response.serializer(), Mock.response))
@@ -137,47 +153,52 @@ fun runServer(analyze: (Response) -> Pair<Int, Int>?) {
         val responseJson = packet.data.decodeToString().take(packet.length)
         val response = Json.decodeFromString(Response.serializer(), responseJson)
 
-        // TODO: wait for any 0 block under a non 0 before analyzing, which means the blocks are not yet finished from falling
-        val command = if (framesToSkip > 0) {
-            --framesToSkip
-            "no-op"
-        } else if (response.board.flatten().map { it.state }.any { it == 16 || it == 64 }) {
-            framesToSkip = FRAMES_TO_SKIP
-            queue = null
-            "no-op"
-        } else if (response.board.last().any { it.value != 0 && it.value != 255 }) {
-            framesToSkip = FRAMES_TO_SKIP
-
-            if (!queue.isNullOrEmpty()) {
-                queue.removeFirst()
-            } else {
-                analyze(response)?.let {
-                    println("Moving to ${it.second}, ${it.first}")
-                    val newQueue = mutableListOf<String>()
-
-                    val cursorX = response.cursor.x - 1
-                    val cursorY = response.cursor.y - 4
-
-                    if (it.first > cursorX) {
-                        newQueue.addAll(List(abs(it.first - cursorX)) { "right" })
-                    } else if (it.first < cursorX) {
-                        newQueue.addAll(List(abs(cursorX - it.first)) { "left" })
-                    }
-
-                    if (it.second > cursorY) {
-                        newQueue.addAll(List(abs(it.second - cursorY)) { "down" })
-                    } else if (it.second < cursorY) {
-                        newQueue.addAll(List(abs(cursorY - it.second)) { "up" })
-                    }
-
-                    newQueue.add("A")
-
-                    queue = newQueue
-                    "no-op"
-                } ?: "no-op"
+        val command = when {
+            framesToSkip > 0 -> {
+                --framesToSkip
+                NO_OP
             }
-        } else {
-            "no-op"
+
+            response.board.flatten().map { it.state }.any { it == 16 || it == 64 } || isAnyBlockFalling(response.board) -> {
+                framesToSkip = FRAMES_TO_SKIP
+                queue = null
+                NO_OP
+            }
+
+            response.board.last().any { it.value != 0 && it.value != 255 } -> {
+                framesToSkip = FRAMES_TO_SKIP
+
+                if (!queue.isNullOrEmpty()) {
+                    queue.removeFirst()
+                } else {
+                    analyze(response)?.let {
+                        println("Moving to ${it.second}, ${it.first}")
+                        val newQueue = mutableListOf<String>()
+
+                        val cursorX = response.cursor.x - 1
+                        val cursorY = response.cursor.y - 4
+
+                        if (it.first > cursorX) {
+                            newQueue.addAll(List(abs(it.first - cursorX)) { "right" })
+                        } else if (it.first < cursorX) {
+                            newQueue.addAll(List(abs(cursorX - it.first)) { "left" })
+                        }
+
+                        if (it.second > cursorY) {
+                            newQueue.addAll(List(abs(it.second - cursorY)) { "down" })
+                        } else if (it.second < cursorY) {
+                            newQueue.addAll(List(abs(cursorY - it.second)) { "up" })
+                        }
+
+                        newQueue.add("A")
+
+                        queue = newQueue
+                        NO_OP
+                    } ?: NO_OP
+                }
+            }
+
+            else -> NO_OP
         }
 
         datagramSocket.send(
