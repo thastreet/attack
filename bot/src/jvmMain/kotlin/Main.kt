@@ -137,6 +137,7 @@ fun runServer(analyze: (Response) -> Pair<Int, Int>?) {
         val responseJson = packet.data.decodeToString().take(packet.length)
         val response = Json.decodeFromString(Response.serializer(), responseJson)
 
+        // TODO: wait for any 0 block under a non 0 before analyzing, which means the blocks are not yet finished from falling
         val command = if (framesToSkip > 0) {
             --framesToSkip
             "no-op"
