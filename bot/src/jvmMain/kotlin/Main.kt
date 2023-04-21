@@ -1,3 +1,4 @@
+
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -14,6 +15,7 @@ import java.net.DatagramSocket
 import kotlin.math.abs
 
 private const val MOCK_ENABLED = false
+private const val FRAMES_TO_SKIP = 15
 
 fun main() {
     application {
@@ -66,9 +68,9 @@ fun simulateFlip(board: Array<Array<Response.Block>>, i: Int, j: Int): Pair<Int,
     applyGravity(board)
 
     for (k in board.indices) {
-        val combos = getConsecutive(board[k].map { it.value }).filter { it.count > 2 }
+        val combos = getConsecutive(board[k].map { it.value }).filter { it.count > 2 && it.value != 0 }
         combos.firstOrNull()?.let {
-            println("Combo ${it.count} at row index $k col ${it.startIndex}")
+            println("Combo ${it.count} at row from bottom ${board.size - k - 1} col ${it.startIndex}")
             return Pair(i, j)
         }
     }
@@ -84,8 +86,6 @@ data class Combo(
 
 fun getConsecutive(row: Collection<Int>): List<Combo> =
     row.foldIndexed(mutableListOf()) { index, acc, value ->
-        if (value == 0) return@foldIndexed acc
-
         if (acc.isEmpty()) {
             acc.add(Combo(value, 1, index))
         } else {
@@ -129,7 +129,7 @@ fun runServer(analyze: (Response) -> Pair<Int, Int>?) {
     val packet = DatagramPacket(buffer, buffer.size)
 
     var queue: MutableList<String>? = null
-    var skipNextFrame = false
+    var framesToSkip = 0
 
     while (true) {
         datagramSocket.receive(packet)
@@ -137,9 +137,19 @@ fun runServer(analyze: (Response) -> Pair<Int, Int>?) {
         val responseJson = packet.data.decodeToString().take(packet.length)
         val response = Json.decodeFromString(Response.serializer(), responseJson)
 
-        val animating = response.board.flatten().map { it.state }.any { it == 16 || it == 64 }
-        val command = if (!animating && response.board.last().any { it.value != 0 && it.value != 255 }) {
-            if (queue == null) {
+        val command = if (framesToSkip > 0) {
+            --framesToSkip
+            "no-op"
+        } else if (response.board.flatten().map { it.state }.any { it == 16 || it == 64 }) {
+            framesToSkip = FRAMES_TO_SKIP
+            queue = null
+            "no-op"
+        } else if (response.board.last().any { it.value != 0 && it.value != 255 }) {
+            framesToSkip = FRAMES_TO_SKIP
+
+            if (!queue.isNullOrEmpty()) {
+                queue.removeFirst()
+            } else {
                 analyze(response)?.let {
                     println("Moving to ${it.second}, ${it.first}")
                     val newQueue = mutableListOf<String>()
@@ -162,21 +172,10 @@ fun runServer(analyze: (Response) -> Pair<Int, Int>?) {
                     newQueue.add("A")
 
                     queue = newQueue
-                }
-            }
-
-            if (response.board.last().any { it.value != 0 && it.value != 255 } && !queue.isNullOrEmpty() && !skipNextFrame) {
-                skipNextFrame = true
-                queue?.removeFirst() ?: "no-op"
-            } else {
-                skipNextFrame = false
-                "no-op"
+                    "no-op"
+                } ?: "no-op"
             }
         } else {
-            if (animating) {
-                queue = null
-            }
-
             "no-op"
         }
 
