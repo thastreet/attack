@@ -1,5 +1,4 @@
 
-import androidx.compose.desktop.ui.tooling.preview.Preview
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +16,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.times
-import kotlinx.serialization.json.Json
 
 @Composable
 fun GameView(response: Response?) {
@@ -54,7 +52,7 @@ fun GameView(response: Response?) {
                             }
 
                             when (block.state) {
-                                2 -> Box(
+                                Constants.BLOCK_STATE_CRITICAL -> Box(
                                     Modifier
                                         .fillMaxSize()
                                         .background(Color.Black.copy(alpha = 0.33f)),
@@ -63,12 +61,12 @@ fun GameView(response: Response?) {
                                     Text("!", fontSize = 26.sp, color = Color.White)
                                 }
 
-                                4 -> NoFilterImage(
+                                Constants.BLOCK_STATE_CEMENT -> NoFilterImage(
                                     "block.png",
                                     modifier = Modifier.fillMaxSize()
                                 )
 
-                                16 -> Box(
+                                Constants.BLOCK_STATE_BLOCK_ANIMATION_2 -> Box(
                                     Modifier
                                         .fillMaxSize()
                                         .background(Color.Black.copy(alpha = 0.33f)),
@@ -77,18 +75,18 @@ fun GameView(response: Response?) {
                                     Text("2", fontSize = 26.sp, color = Color.White)
                                 }
 
-                                32 -> Box(
+                                Constants.BLOCK_STATE_LAST_ROW -> Box(
                                     Modifier
                                         .fillMaxSize()
                                         .background(Color.Black.copy(alpha = 0.6f))
                                 )
 
-                                20, 68 -> NoFilterImage(
+                                Constants.BLOCK_STATE_BREAKING_1, Constants.BLOCK_STATE_BREAKING_2 -> NoFilterImage(
                                     "block2.png",
                                     modifier = Modifier.fillMaxSize()
                                 )
 
-                                64 -> Box(
+                                Constants.BLOCK_STATE_BLOCK_ANIMATION_1 -> Box(
                                     Modifier
                                         .fillMaxSize()
                                         .background(Color.Black.copy(alpha = 0.33f)),
@@ -106,15 +104,9 @@ fun GameView(response: Response?) {
         NoFilterImage(
             "cursor.png",
             modifier = Modifier
-                .offset((requiredResponse.cursor.x - 1) * blockSize - 4.dp, (requiredResponse.cursor.y - 4) * blockSize - 4.dp)
+                .offset(response.cursor.x * blockSize - 4.dp, response.cursor.y * blockSize - 4.dp)
                 .width(72.dp)
                 .height(40.dp)
         )
     }
-}
-
-@Preview
-@Composable
-private fun Preview() {
-    GameView(Json.decodeFromString(Response.serializer(), Mock.response))
 }
