@@ -20,17 +20,26 @@ fun runServer(analyze: (Response) -> Pair<Int, Int>?) {
         val responseJson = packet.data.decodeToString().take(packet.length)
         val response = Json.decodeFromString(Response.serializer(), responseJson)
 
+        val isAnyBlockAnimating = response.board
+            .flatten()
+            .map { it.state }
+            .any { it == Constants.BLOCK_STATE_BLOCK_ANIMATION_1 || it == Constants.BLOCK_STATE_BLOCK_ANIMATION_2 }
+
+        val isAnyBlockFalling = isAnyBlockFalling(response.board)
+
         val command = when {
             framesToSkip > 0 -> {
+                println("Skipping frames $framesToSkip")
                 --framesToSkip
                 Constants.COMMAND_NO_OP
             }
 
-            response.board
-                .flatten()
-                .map { it.state }
-                .any { it == Constants.BLOCK_STATE_BLOCK_ANIMATION_1 || it == Constants.BLOCK_STATE_BLOCK_ANIMATION_2 } || isAnyBlockFalling(response.board)
-            -> {
+            isAnyBlockAnimating || isAnyBlockFalling -> {
+                if (isAnyBlockAnimating) {
+                    println("Block animating")
+                } else {
+                    println("Block falling")
+                }
                 framesToSkip = FRAMES_TO_SKIP
                 queue = null
                 Constants.COMMAND_NO_OP
@@ -40,11 +49,14 @@ fun runServer(analyze: (Response) -> Pair<Int, Int>?) {
                 .lastOrNull()
                 ?.any { it.value != Constants.BLOCK_VALUE_EMPTY && it.value != Constants.BLOCK_VALUE_UNKNOWN } == true
             -> {
+                println("Active")
                 framesToSkip = FRAMES_TO_SKIP
 
                 if (!queue.isNullOrEmpty()) {
+                    println("Processing next command")
                     queue.removeFirst()
                 } else {
+                    println("Analyzing")
                     analyze(response)?.let {
                         println("Moving to ${it.second}, ${it.first}")
                         val newQueue = mutableListOf<String>()

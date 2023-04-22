@@ -9,7 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-private const val USE_LOCAL_CLIENT = false
+private const val USE_LOCAL_CLIENT = true
 
 fun main() {
     application {
